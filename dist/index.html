@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="theme-color" content="#05070b" />
+  <meta name="description" content="K线狂飙——快节奏多空交易游戏交互原型" />
+  <title>K线狂飙</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2305070b'/%3E%3Cpath d='M10 42h8V24h-8v18zm18 10h8V12h-8v40zm18-17h8V20h-8v15z' fill='%2300f5d4'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="game-shell" id="gameShell">
+    <header class="hud">
+      <div class="brand" aria-label="K线狂飙">
+        <span class="brand-mark"><i></i><i></i><i></i></span>
+        <div><strong>K线狂飙</strong><span id="marketSource">HISTORY REPLAY</span></div>
+      </div>
+
+      <div class="round-block">
+        <span>账户净值 · <b id="replayCounter">0 / 500</b></span>
+        <strong id="equity">$10,000.00</strong>
+        <div class="time-track"><i id="timeFill"></i></div>
+        <small>500 根回放进度</small>
+      </div>
+
+      <div class="hud-score">
+        <span>得分</span>
+        <strong id="score">0</strong>
+        <em id="rankChip"><span id="careerPoints">5,000</span> PT</em>
+        <b id="scoreDelta"></b>
+      </div>
+    </header>
+
+    <section class="stage" aria-label="实时K线交易区">
+      <div class="market-strip">
+        <div class="symbol">
+          <span id="symbolName">等待选标的</span>
+          <strong id="lastPrice">128.42</strong>
+          <em id="priceDelta">+1.84%</em>
+        </div>
+        <div class="market-stat"><span>连击</span><strong id="combo">× 1</strong></div>
+        <div class="market-stat"><span>浮动盈亏</span><strong id="floatingPnl">$0.00</strong></div>
+        <div class="market-stat position-equity-stat"><span>仓位净值 · 3×</span><strong id="positionEquity">$0.00</strong></div>
+        <button class="sound-toggle" id="soundToggle" aria-label="声音开关" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9v6h4l5 4V5L9 9H5zm12.5 3a4 4 0 0 0-2-3.46v6.92A4 4 0 0 0 17.5 12z"/></svg>
+        </button>
+      </div>
+
+      <div class="chart-wrap" id="chartWrap">
+        <canvas id="chart" aria-label="持续变化的模拟K线图"></canvas>
+        <div class="chart-grid" aria-hidden="true"></div>
+        <div class="price-line" id="priceLine"><span id="linePrice">128.42</span></div>
+        <div class="next-zone"><span>NEXT</span></div>
+        <div class="danger-meter" aria-label="波动强度">
+          <span>波动</span><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div class="combo-burst" id="comboBurst" aria-live="polite"></div>
+        <div class="pattern-callout" id="patternCallout" aria-live="polite"></div>
+        <div class="market-event" id="marketEvent" aria-live="polite"><i></i><span></span></div>
+        <div class="floating-layer" id="floatingLayer" aria-hidden="true"></div>
+      </div>
+
+      <div class="position-bar" id="positionBar">
+        <div class="position-side flat" id="positionSide">空仓</div>
+        <div><span>持仓均价</span><strong id="entryPrice">—</strong></div>
+        <div><span>占用保证金</span><strong id="positionSize">$0.00</strong></div>
+        <div><span>持仓收益率</span><strong id="returnRate">0.00%</strong></div>
+        <div class="position-pulse flat" id="positionStatus"><i></i><span>等待入场</span></div>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="交易操作">
+      <div class="allocation">
+        <div class="allocation-head"><span>本次投入</span><strong id="allocationValue">10% · $1,000</strong></div>
+        <div class="segment-group" id="allocationSegments" role="radiogroup" aria-label="账户投入比例">
+          <button data-value="10" role="radio" aria-checked="true" class="active">10</button>
+          <button data-value="25" role="radio" aria-checked="false">25</button>
+          <button data-value="50" role="radio" aria-checked="false">50</button>
+          <button data-value="100" role="radio" aria-checked="false">MAX</button>
+        </div>
+        <div class="balance-row"><span>可用保证金</span><strong id="balance">$10,000.00</strong></div>
+      </div>
+
+      <button class="trade-key long-key" id="longButton">
+        <span class="key-hint">A</span>
+        <span class="trade-icon" id="longIcon">↗</span>
+        <span class="trade-copy"><small id="longCaption">看涨 · LONG</small><strong id="longLabel">做多</strong></span>
+        <span class="key-ripple"></span>
+      </button>
+
+      <button class="close-key" id="closeButton">
+        <span class="close-symbol">◆</span>
+        <strong>平仓</strong>
+        <small>SPACE</small>
+      </button>
+
+      <button class="trade-key short-key" id="shortButton">
+        <span class="key-hint">D</span>
+        <span class="trade-copy"><small id="shortCaption">看跌 · SHORT</small><strong id="shortLabel">做空</strong></span>
+        <span class="trade-icon" id="shortIcon">↘</span>
+        <span class="key-ripple"></span>
+      </button>
+    </section>
+
+    <footer class="status-rail">
+      <div><span class="live-dot"></span><span id="replayDate">真实历史回放</span></div>
+      <div class="streaks"><span>连续盈利 <strong id="winStreak">0</strong></span><span>已实现盈亏 <strong id="realizedPnl">$0.00</strong></span></div>
+      <div class="keys-help"><kbd>A</kbd> 多 <kbd>SPACE</kbd> 平 <kbd>D</kbd> 空</div>
+    </footer>
+
+    <div class="screen-flash" id="screenFlash"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <section class="game-over" id="gameOver" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="gameOverTitle">
+      <div class="game-over-card">
+        <span class="result-kicker" id="resultKicker">挑战结束</span>
+        <h1 id="gameOverTitle">账户归零</h1>
+        <div class="result-equity" id="resultEquity">$0.00</div>
+        <div class="result-grid"><span>最终得分<strong id="resultScore">0</strong></span><span>形态奖励<strong id="resultPatterns">0</strong></span></div>
+        <div class="points-settlement" id="pointsSettlement">积分结算 0 PT</div>
+        <button id="restartButton">重新开局 <kbd>ENTER</kbd></button>
+      </div>
+    </section>
+    <section class="lobby show" id="lobby" role="dialog" aria-modal="true" aria-labelledby="lobbyTitle">
+      <div class="lobby-card">
+        <header><div><span>HISTORY ARENA</span><h1 id="lobbyTitle">选择历史战场</h1></div><div class="points-wallet"><small>当前积分</small><strong><span id="lobbyPoints">5,000</span> PT</strong></div></header>
+        <div class="market-tabs" id="marketTabs" role="tablist" aria-label="市场分类">
+          <button class="active" data-market="us">美股</button><button data-market="cn">A 股</button><button data-market="crypto">虚拟货币</button><button data-market="futures">期货</button>
+        </div>
+        <div class="instrument-grid" id="instrumentGrid" aria-label="选择交易标的"></div>
+        <div class="match-rules">
+          <span><small>历史长度</small><strong>500 根</strong></span>
+          <span><small>入场费</small><strong class="negative">−200 PT</strong></span>
+          <span><small>积分结算</small><strong>按最终盈亏率</strong></span>
+          <span><small>抽取方式</small><strong>随机连续区间</strong></span>
+        </div>
+        <p class="data-note">每局只使用真实历史 OHLC；加载失败时不会用模拟行情替代。</p>
+        <button class="start-match" id="startMatch">扣除 200 PT · 开始比赛</button>
+        <div class="load-status" id="loadStatus" role="status" aria-live="polite"></div>
+      </div>
+    </section>
+  </main>
+  <script src="./binance-history.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
