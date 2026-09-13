@@ -28,6 +28,32 @@
   };
   let audioContext;
   let toastTimer;
+  const effectTimers = new WeakMap();
+  const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let reducedMotion = motionPreference.matches;
+  try { const saved = localStorage.getItem('kline-rush-motion'); if (saved !== null) reducedMotion = saved === 'reduced'; } catch (_) {}
+  function setMotion(reduced, persist = true) {
+    reducedMotion = reduced;
+    document.documentElement.classList.toggle('low-motion', reduced);
+    $('motionToggle').setAttribute('aria-pressed', String(reduced));
+    $('lobbyMotion').checked = reduced;
+    if (reduced) { state.particles = []; $('screenFlash').className = 'screen-flash'; }
+    if (persist) try { localStorage.setItem('kline-rush-motion', reduced ? 'reduced' : 'full'); } catch (_) {}
+  }
+  function timedEffect(element, className, duration, reset = []) {
+    clearTimeout(effectTimers.get(element)); element.classList.remove(className, ...reset);
+    void element.offsetWidth; element.classList.add(className);
+    effectTimers.set(element, setTimeout(() => element.classList.remove(className, ...reset), duration));
+  }
+  function activeModal() { return $('lobby').classList.contains('show') ? $('lobby') : $('gameOver').classList.contains('show') ? $('gameOver') : null; }
+  function syncModal() {
+    const modal = activeModal();
+    document.querySelectorAll('.hud, .stage, .controls, .status-rail').forEach(element => { element.inert = !!modal; });
+    $('lobby').setAttribute('aria-hidden', String(modal !== $('lobby')));
+    $('gameOver').setAttribute('aria-hidden', String(modal !== $('gameOver')));
+    if (modal) (modal.querySelector('button:not(:disabled)') || modal).focus();
+    else chartWrap.focus({ preventScroll: true });
+  }
   const money = value => `${value < 0 ? '-' : ''}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const signedMoney = value => `${value >= 0 ? '+' : '-'}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const sideSign = side => side === 'long' ? 1 : -1;
@@ -148,7 +174,7 @@
       const start = Math.floor(Math.random() * (history.length - length + 1));
       state.careerPoints -= CONFIG.entryFee; savePoints();
       initializeReplay(history.slice(start, start + length));
-      $('lobby').classList.remove('show');
+      $('lobby').classList.remove('show'); syncModal();
       $('loadStatus').textContent = '';
     } catch (error) {
       $('loadStatus').textContent = `无法开始：${error?.message || '历史数据加载失败'}`;
@@ -347,8 +373,8 @@
     const previous = state.seenPatterns.get(pattern.name) ?? -999; if (pattern.endId - previous < 16) return;
     state.seenPatterns.set(pattern.name, pattern.endId); state.annotations.push(pattern); state.annotations = state.annotations.slice(-5);
     const matched = state.position?.side === pattern.side; const callout = $('patternCallout'); callout.className = `pattern-callout${matched ? ' match' : ''}`;
-    callout.textContent = matched ? `${pattern.category} · ${pattern.name} · 顺势 +${600 * state.combo}` : `${pattern.category} · ${pattern.name}`; void callout.offsetWidth; callout.classList.add('show');
-    if (state.position) pulsePositionValue(matched);
+    callout.textContent = matched ? `${pattern.category} · ${pattern.name} · 顺势 +${600 * state.combo}` : `${pattern.category} · ${pattern.name}`; timedEffect(callout, 'show', 2200);
+    if (state.position) pulsePositionValue(unrealizedPnl() >= 0);
     if (matched) { const reward = 600 * state.combo; state.bonusScore += reward; state.combo += 1; state.patternsMatched += 1; burst(`PATTERN +${reward}`); ambientFeedback(pattern.side, `${pattern.name} 命中`, 43, 42); }
   }
   function completeCandle() {
@@ -358,13 +384,13 @@
     if (state.replayIndex >= CONFIG.matchCandles) finishMatch('complete'); else prepareCandle();
   }
 
-  function emitEventParticles(direction) { const color = direction > 0 ? LONG : SHORT; for (let i = 0; i < 7; i += 1) state.particles.push({ age: 0, life: 9 + Math.random() * 6, vx: -(1.2 + Math.random() * 3.8), vy: direction * (Math.random() - .3) * 1.2, offsetY: (Math.random() - .5) * 36, width: .6 + Math.random() * 1.6, color }); }
-  function beginMarketEvent(direction, label) { state.marketEvent = { direction }; const element = $('marketEvent'); chartWrap.classList.remove('event-bull', 'event-bear'); chartWrap.classList.add(direction > 0 ? 'event-bull' : 'event-bear'); element.className = `market-event ${direction > 0 ? 'bull' : 'bear'}`; element.querySelector('span').textContent = `${label} · ${direction > 0 ? '大阳线' : '大阴线'}`; if (state.position) pulsePositionValue(direction === sideSign(state.position.side)); playTone(direction > 0 ? 'long' : 'short', .65); }
+  function emitEventParticles(direction) { if (reducedMotion) return; state.particles = state.particles.slice(-56); const color = direction > 0 ? LONG : SHORT; for (let i = 0; i < 7; i += 1) state.particles.push({ age: 0, life: 9 + Math.random() * 6, vx: -(1.2 + Math.random() * 3.8), vy: direction * (Math.random() - .3) * 1.2, offsetY: (Math.random() - .5) * 36, width: .6 + Math.random() * 1.6, color }); }
+  function beginMarketEvent(direction, label) { state.marketEvent = { direction }; const element = $('marketEvent'); chartWrap.classList.remove('event-bull', 'event-bear'); chartWrap.classList.add(direction > 0 ? 'event-bull' : 'event-bear'); element.className = `market-event ${direction > 0 ? 'bull' : 'bear'}`; element.querySelector('span').textContent = `${label} · ${direction > 0 ? '大阳线' : '大阴线'}`; if (state.position) pulsePositionValue(unrealizedPnl() >= 0); playTone(direction > 0 ? 'long' : 'short', .65); }
   function finishMarketEvent() { if (!state.marketEvent) return; state.marketEvent = null; setTimeout(() => { if (!state.marketEvent) { $('marketEvent').className = 'market-event'; chartWrap.classList.remove('event-bull', 'event-bear'); } }, 450); }
 
   function updateScoreDisplay(nextScore) { const delta = nextScore - state.renderedScore; if (!delta) return; $('score').textContent = `${nextScore > 0 ? '+' : ''}${nextScore.toLocaleString('en-US')}`; if (Math.abs(delta) >= 2) { const ticker = $('scoreDelta'); ticker.textContent = `${delta > 0 ? '+' : ''}${delta}`; ticker.style.color = delta >= 0 ? LONG : SHORT; ticker.classList.remove('tick'); void ticker.offsetWidth; ticker.classList.add('tick'); } state.renderedScore = nextScore; }
   function updateTradeButtons() {
-    const position = state.position; const free = availableMargin(); const nextMargin = free * state.allocation / 100; const longButton = $('longButton'); const shortButton = $('shortButton'); longButton.classList.remove('reduce-key', 'locked'); shortButton.classList.remove('reduce-key', 'locked');
+    const position = state.position; const free = availableMargin(); const nextMargin = Math.min(free * state.allocation / 100, free / (1 + CONFIG.leverage * CONFIG.feeRate)); const longButton = $('longButton'); const shortButton = $('shortButton'); longButton.classList.remove('reduce-key', 'locked'); shortButton.classList.remove('reduce-key', 'locked');
     if (!position) { $('longLabel').textContent = '做多'; $('longCaption').textContent = `看涨 · ${money(nextMargin)}`; $('longIcon').textContent = '↗'; $('shortLabel').textContent = '做空'; $('shortCaption').textContent = `看跌 · ${money(nextMargin)}`; $('shortIcon').textContent = '↘'; return; }
     if (position.side === 'long') { $('longLabel').textContent = '加多'; $('longCaption').textContent = `主动加仓 · ${money(nextMargin)}`; $('longIcon').textContent = '+↗'; $('shortLabel').textContent = '减多'; $('shortCaption').textContent = `反向减仓 · ${state.allocation}%`; $('shortIcon').textContent = '−'; shortButton.classList.add('reduce-key'); if (nextMargin < CONFIG.minMargin) longButton.classList.add('locked'); }
     else { $('shortLabel').textContent = '加空'; $('shortCaption').textContent = `主动加仓 · ${money(nextMargin)}`; $('shortIcon').textContent = '+↘'; $('longLabel').textContent = '减空'; $('longCaption').textContent = `反向减仓 · ${state.allocation}%`; $('longIcon').textContent = '−'; longButton.classList.add('reduce-key'); if (nextMargin < CONFIG.minMargin) shortButton.classList.add('locked'); }
@@ -373,7 +399,7 @@
     updatePoints(); const accountEquity = Math.max(0, equity()); const pnl = unrealizedPnl(); const sessionMove = state.price ? (state.price - state.sessionOpen) / state.sessionOpen * 100 : 0; state.score = totalScore();
     $('lastPrice').textContent = state.price ? state.price.toFixed(2) : '—'; $('linePrice').textContent = state.price ? state.price.toFixed(2) : '—'; $('priceDelta').textContent = `${sessionMove >= 0 ? '+' : ''}${sessionMove.toFixed(2)}%`; $('priceDelta').className = sessionMove >= 0 ? 'positive' : 'negative';
     $('floatingPnl').textContent = state.position ? signedMoney(pnl) : '$0.00'; $('floatingPnl').className = !state.position ? '' : pnl >= 0 ? 'positive' : 'negative'; const positionEquity = state.position ? Math.max(0, state.position.margin + pnl) : 0; $('positionEquity').textContent = money(positionEquity); $('positionEquity').classList.toggle('positive', !!state.position && pnl >= 0); $('positionEquity').classList.toggle('negative', !!state.position && pnl < 0);
-    $('equity').textContent = money(accountEquity); $('balance').textContent = money(availableMargin()); $('allocationValue').textContent = `${state.allocation}% · ${money(availableMargin() * state.allocation / 100)}`; $('realizedPnl').textContent = signedMoney(state.realizedPnl); $('realizedPnl').className = state.realizedPnl >= 0 ? 'positive' : 'negative'; $('combo').textContent = `× ${state.combo}`; $('winStreak').textContent = state.streak; $('replayCounter').textContent = `${Math.min(state.replayIndex, CONFIG.matchCandles)} / ${CONFIG.matchCandles}`; $('replayDate').textContent = state.current ? `${fmtDate(state.current.time)} · ${state.sourceLabel}` : '真实历史回放';
+    $('equity').textContent = money(accountEquity); $('balance').textContent = money(availableMargin()); $('allocationValue').textContent = `${state.allocation}% · ${money(Math.min(availableMargin() * state.allocation / 100, availableMargin() / (1 + CONFIG.leverage * CONFIG.feeRate)))}`; $('realizedPnl').textContent = signedMoney(state.realizedPnl); $('realizedPnl').className = state.realizedPnl >= 0 ? 'positive' : 'negative'; $('combo').textContent = `× ${state.combo}`; $('winStreak').textContent = state.streak; $('replayCounter').textContent = `${Math.min(state.replayIndex, CONFIG.matchCandles)} / ${CONFIG.matchCandles}`; $('replayDate').textContent = state.current ? `${fmtDate(state.current.time)} · ${state.sourceLabel}` : '真实历史回放';
     $('timeFill').style.width = `${Math.max(0, Math.min(100, state.replayIndex / CONFIG.matchCandles * 100))}%`; updateScoreDisplay(state.score);
     const bar = $('positionBar'); const side = $('positionSide'); const status = $('positionStatus');
     if (!state.position) { side.textContent = '空仓'; side.className = 'position-side flat'; bar.classList.remove('short-mode'); $('entryPrice').textContent = '—'; $('positionSize').textContent = '$0.00'; $('returnRate').textContent = '0.00%'; $('returnRate').className = ''; status.className = 'position-pulse flat'; status.querySelector('span').textContent = '等待入场'; }
@@ -382,16 +408,16 @@
   }
 
   function playTone(type, volume = 1) { if (!state.sound) return; try { audioContext ||= new (window.AudioContext || window.webkitAudioContext)(); const oscillator = audioContext.createOscillator(); const gain = audioContext.createGain(); oscillator.type = type === 'close' ? 'triangle' : 'square'; oscillator.frequency.setValueAtTime(type === 'long' ? 620 : type === 'short' ? 270 : 440, audioContext.currentTime); oscillator.frequency.exponentialRampToValueAtTime(type === 'long' ? 910 : type === 'short' ? 190 : 660, audioContext.currentTime + .07); gain.gain.setValueAtTime(.055 * volume, audioContext.currentTime); gain.gain.exponentialRampToValueAtTime(.001, audioContext.currentTime + .1); oscillator.connect(gain).connect(audioContext.destination); oscillator.start(); oscillator.stop(audioContext.currentTime + .105); } catch (_) {} }
-  function addFloater(type, label, x, y) { const floater = document.createElement('span'); floater.className = 'float-text'; floater.style.color = type === 'long' ? LONG : type === 'short' ? SHORT : AMBER; floater.style.left = `${x}%`; floater.style.top = `${y}%`; floater.textContent = label; $('floatingLayer').appendChild(floater); setTimeout(() => floater.remove(), 850); }
-  function feedback(type, label, x = 50, y = 56) { const button = type === 'long' ? $('longButton') : type === 'short' ? $('shortButton') : $('closeButton'); button.classList.remove('hit'); void button.offsetWidth; button.classList.add('hit'); setTimeout(() => button.classList.remove('hit'), 170); if (type !== 'close') { $('screenFlash').className = `screen-flash ${type}`; setTimeout(() => { $('screenFlash').className = 'screen-flash'; }, 360); } addFloater(type, label, x, y); playTone(type); if (navigator.vibrate) navigator.vibrate(type === 'close' ? 12 : [12, 18, 16]); }
-  function ambientFeedback(type, label, x = 50, y = 45) { $('screenFlash').className = `screen-flash ${type}`; setTimeout(() => { $('screenFlash').className = 'screen-flash'; }, 360); addFloater(type, label, x, y); playTone(type, .8); if (navigator.vibrate) navigator.vibrate(10); }
-  function pulsePositionValue(profitable) { if (!state.position) return; const element = $('positionEquity'); element.classList.remove('impact-profit', 'impact-loss'); void element.offsetWidth; element.classList.add(profitable ? 'impact-profit' : 'impact-loss'); setTimeout(() => element.classList.remove('impact-profit', 'impact-loss'), 760); }
-  function burst(text) { const element = $('comboBurst'); element.textContent = text; element.classList.remove('show'); void element.offsetWidth; element.classList.add('show'); }
+  function addFloater(type, label, x, y) { const layer = $('floatingLayer'); while (layer.children.length >= 5) layer.firstElementChild.remove(); const floater = document.createElement('span'); floater.className = 'float-text'; floater.style.color = type === 'long' ? LONG : type === 'short' ? SHORT : AMBER; floater.style.left = `${x}%`; floater.style.top = `${y}%`; floater.textContent = label; layer.appendChild(floater); setTimeout(() => floater.remove(), 850); }
+  function feedback(type, label, x = 50, y = 56) { const button = type === 'long' ? $('longButton') : type === 'short' ? $('shortButton') : $('closeButton'); timedEffect(button, 'hit', 110); addFloater(type, label, x, y); playTone(type, .65); if (!reducedMotion && navigator.vibrate) navigator.vibrate(8); }
+  function ambientFeedback(type, label, x = 50, y = 45) { if (!reducedMotion) timedEffect($('screenFlash'), type, 260, ['long', 'short']); addFloater(type, label, x, y); playTone(type, .8); }
+  function pulsePositionValue(profitable) { for (const element of [$('equity'), $('positionEquity')]) timedEffect(element, profitable ? 'impact-profit' : 'impact-loss', 650, ['impact-profit', 'impact-loss']); }
+  function burst(text) { $('comboBurst').textContent = text; timedEffect($('comboBurst'), 'show', 1200); }
   function showToast(message) { $('toast').textContent = message; $('toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 1700); }
   function recordFastAction() { const now = performance.now(); state.lastActions = state.lastActions.filter(time => now - time < 2200); state.lastActions.push(now); if (state.lastActions.length >= 3) { state.combo += 1; state.bonusScore += 40; burst(`RUSH ×${state.combo}`); } }
 
-  function openOrAdd(side) { const free = availableMargin(); const margin = free * state.allocation / 100; if (margin < CONFIG.minMargin) { showToast(`可用保证金不足，至少需要 ${money(CONFIG.minMargin)}`); return false; } const notional = margin * CONFIG.leverage; const qty = notional / state.price; const fee = notional * CONFIG.feeRate; state.walletBalance -= fee; state.realizedPnl -= fee; const opening = !state.position; if (opening) state.position = { side, qty, avgPrice: state.price, margin, startCandleId: state.current.id }; else { const oldQty = state.position.qty; state.position.avgPrice = (state.position.avgPrice * oldQty + state.price * qty) / (oldQty + qty); state.position.qty += qty; state.position.margin += margin; } state.trades.push({ action: opening ? 'open' : 'add', side, price: state.price, candleId: state.current.id }); recordFastAction(); feedback(side, `${opening ? '开仓' : '加仓'} ${state.allocation}%`); showToast(`${side === 'long' ? '多单' : '空单'}成交 ${state.price.toFixed(2)} · 手续费 ${money(fee)}`); return true; }
-  function reducePosition(fraction, viaCloseButton = false, quiet = false) { if (!state.position) { if (!quiet) showToast('当前没有持仓'); return false; } const position = state.position; const closeFraction = Math.max(.01, Math.min(1, fraction)); const qty = position.qty * closeFraction; const notional = qty * state.price; const grossPnl = (state.price - position.avgPrice) * qty * sideSign(position.side); const fee = notional * CONFIG.feeRate; const netPnl = grossPnl - fee; state.walletBalance += netPnl; state.realizedPnl += netPnl; state.trades.push({ action: 'reduce', side: position.side, price: state.price, candleId: state.current.id }); position.qty -= qty; position.margin *= 1 - closeFraction; if (closeFraction >= .999 || position.qty < .0001) state.position = null; if (!quiet) { if (netPnl >= 0) { state.streak += 1; state.combo += 1; state.bonusScore += 80 * state.combo; } else { state.streak = 0; state.combo = 1; } recordFastAction(); feedback(viaCloseButton ? 'close' : position.side === 'long' ? 'short' : 'long', `${netPnl >= 0 ? '盈利' : '亏损'} ${signedMoney(netPnl)}`); showToast(`${state.position ? `减仓 ${Math.round(closeFraction * 100)}%` : '全部平仓'} · 已实现 ${signedMoney(netPnl)}`); } return true; }
+  function openOrAdd(side) { const free = availableMargin(); const margin = Math.min(free * state.allocation / 100, free / (1 + CONFIG.leverage * CONFIG.feeRate)); if (margin < CONFIG.minMargin) { showToast(`可用保证金不足，至少需要 ${money(CONFIG.minMargin)}`); return false; } const notional = margin * CONFIG.leverage; const qty = notional / state.price; const fee = notional * CONFIG.feeRate; state.walletBalance -= fee; state.realizedPnl -= fee; const opening = !state.position; if (opening) state.position = { side, qty, avgPrice: state.price, margin, startCandleId: state.current.id }; else { const oldQty = state.position.qty; state.position.avgPrice = (state.position.avgPrice * oldQty + state.price * qty) / (oldQty + qty); state.position.qty += qty; state.position.margin += margin; } state.trades.push({ action: opening ? 'open' : 'add', side, price: state.price, candleId: state.current.id }); recordFastAction(); feedback(side, `${opening ? '开仓' : '加仓'} ${state.allocation}%`); showToast(`${side === 'long' ? '多单' : '空单'}成交 ${state.price.toFixed(2)} · 手续费 ${money(fee)}`); return true; }
+  function reducePosition(fraction, viaCloseButton = false, quiet = false) { if (!state.position) { if (!quiet) showToast('当前没有持仓'); return false; } const position = state.position; const closeFraction = Math.max(.01, Math.min(1, fraction)); const qty = position.qty * closeFraction; const notional = qty * state.price; const grossPnl = (state.price - position.avgPrice) * qty * sideSign(position.side); const fee = notional * CONFIG.feeRate; const netPnl = grossPnl - fee; state.walletBalance += netPnl; state.realizedPnl += netPnl; state.trades.push({ action: 'reduce', side: position.side, price: state.price, candleId: state.current.id }); position.qty -= qty; position.margin *= 1 - closeFraction; if (closeFraction >= .999 || position.qty < .0001) state.position = null; if (!quiet) { pulsePositionValue(netPnl >= 0); if (netPnl >= 0) { state.streak += 1; state.combo += 1; state.bonusScore += 80 * state.combo; } else { state.streak = 0; state.combo = 1; } recordFastAction(); feedback(viaCloseButton ? 'close' : position.side === 'long' ? 'short' : 'long', `${netPnl >= 0 ? '盈利' : '亏损'} ${signedMoney(netPnl)}`); showToast(`${state.position ? `减仓 ${Math.round(closeFraction * 100)}%` : '全部平仓'} · 已实现 ${signedMoney(netPnl)}`); } return true; }
   function placeOrder(side) { if (!state.matchActive || state.gameOver) return; if (state.position && state.position.side !== side) reducePosition(state.allocation / 100); else openOrAdd(side); updateHud(); draw(); checkGameEnd(); }
   function closePosition() { if (!state.matchActive || state.gameOver) return; reducePosition(1, true); updateHud(); draw(); checkGameEnd(); }
   function setAllocation(value) { if (![10, 25, 50, 100].includes(value)) throw new Error('投入比例必须为 10、25、50 或 100'); state.allocation = value; [...$('allocationSegments').children].forEach(button => { const active = Number(button.dataset.value) === value; button.classList.toggle('active', active); button.setAttribute('aria-checked', String(active)); }); $('allocationValue').textContent = `${value}% · ${money(availableMargin() * value / 100)}`; if (state.current) updateHud(); }
@@ -400,15 +426,47 @@
   function finishMatch(reason) {
     if (state.gameOver) return; if (state.position) reducePosition(1, true, true); state.gameOver = true; state.matchActive = false; updateHud();
     const finalEquity = Math.max(0, equity()); const returnRate = (finalEquity - CONFIG.startingBalance) / CONFIG.startingBalance; const payout = Math.max(0, Math.round(CONFIG.entryFee * (1 + returnRate * 5))); const netPoints = payout - CONFIG.entryFee; state.careerPoints += payout; savePoints();
-    $('resultKicker').textContent = reason === 'complete' ? '500 根历史回放完成' : reason === 'tenfold' ? '十倍挑战达成' : '账户风险触底'; $('gameOverTitle').textContent = returnRate >= 0 ? `收益 ${(returnRate * 100).toFixed(2)}%` : `亏损 ${(Math.abs(returnRate) * 100).toFixed(2)}%`; $('gameOverTitle').style.color = returnRate >= 0 ? LONG : SHORT; $('resultEquity').textContent = money(finalEquity); $('resultEquity').style.color = returnRate >= 0 ? LONG : SHORT; $('resultScore').textContent = state.score.toLocaleString('en-US'); $('resultPatterns').textContent = state.patternsMatched; $('pointsSettlement').textContent = `积分结算 ${netPoints >= 0 ? '+' : ''}${netPoints} PT（返还 ${payout}）`; $('pointsSettlement').style.color = netPoints >= 0 ? LONG : SHORT; $('gameOver').classList.add('show'); $('gameOver').setAttribute('aria-hidden', 'false'); $('restartButton').focus(); playTone(returnRate >= 0 ? 'long' : 'short', 1.5);
+    $('resultKicker').textContent = reason === 'complete' ? '500 根历史回放完成' : reason === 'tenfold' ? '十倍挑战达成' : '账户风险触底'; $('gameOverTitle').textContent = returnRate >= 0 ? `收益 ${(returnRate * 100).toFixed(2)}%` : `亏损 ${(Math.abs(returnRate) * 100).toFixed(2)}%`; $('gameOverTitle').style.color = returnRate >= 0 ? LONG : SHORT; $('resultEquity').textContent = money(finalEquity); $('resultEquity').style.color = returnRate >= 0 ? LONG : SHORT; $('resultScore').textContent = state.score.toLocaleString('en-US'); $('resultPatterns').textContent = state.patternsMatched; $('pointsSettlement').textContent = `积分结算 ${netPoints >= 0 ? '+' : ''}${netPoints} PT（返还 ${payout}）`; $('pointsSettlement').style.color = netPoints >= 0 ? LONG : SHORT; $('gameOver').classList.add('show'); $('gameOver').setAttribute('aria-hidden', 'false'); syncModal(); $('restartButton').focus(); playTone(returnRate >= 0 ? 'long' : 'short', 1.5);
   }
-  function returnToLobby() { $('gameOver').classList.remove('show'); $('gameOver').setAttribute('aria-hidden', 'true'); $('lobby').classList.add('show'); $('loadStatus').textContent = ''; updatePoints(); }
+  function returnToLobby() { $('gameOver').classList.remove('show'); $('gameOver').setAttribute('aria-hidden', 'true'); $('lobby').classList.add('show'); $('loadStatus').textContent = ''; updatePoints(); syncModal(); }
 
   $('startMatch').addEventListener('click', startMatch);
   $('allocationSegments').addEventListener('click', event => { const button = event.target.closest('button'); if (button) setAllocation(Number(button.dataset.value)); });
-  $('longButton').addEventListener('pointerdown', () => placeOrder('long')); $('shortButton').addEventListener('pointerdown', () => placeOrder('short')); $('closeButton').addEventListener('pointerdown', closePosition); $('restartButton').addEventListener('click', returnToLobby);
+  function bindTradeButton(id, action) {
+    const button = $(id);
+    button.addEventListener('pointerdown', event => { if (event.button !== 0 || !event.isPrimary || activeModal()) return; action(); });
+    button.addEventListener('click', event => { if (event.detail === 0 && !activeModal()) action(); });
+  }
+  bindTradeButton('longButton', () => placeOrder('long'));
+  bindTradeButton('shortButton', () => placeOrder('short'));
+  bindTradeButton('closeButton', closePosition);
+  $('restartButton').addEventListener('click', returnToLobby);
+  $('motionToggle').addEventListener('click', () => setMotion(!reducedMotion));
+  $('lobbyMotion').addEventListener('change', event => setMotion(event.target.checked));
+  motionPreference.addEventListener('change', event => { try { if (localStorage.getItem('kline-rush-motion') === null) setMotion(event.matches, false); } catch (_) { setMotion(event.matches, false); } });
+  $('allocationSegments').addEventListener('keydown', event => {
+    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    event.preventDefault(); const buttons = [...$('allocationSegments').children];
+    const index = buttons.indexOf(document.activeElement); const next = event.key === 'Home' ? 0 : event.key === 'End' ? 3 : (index + (event.key === 'ArrowRight' ? 1 : 3)) % 4;
+    setAllocation(Number(buttons[next].dataset.value)); buttons[next].focus();
+  });
   $('soundToggle').addEventListener('click', () => { state.sound = !state.sound; $('soundToggle').setAttribute('aria-pressed', String(state.sound)); showToast(state.sound ? '音效已开启' : '音效已关闭'); });
-  document.addEventListener('keydown', event => { if (event.repeat) return; if (state.gameOver && event.code === 'Enter') { returnToLobby(); return; } if (event.code === 'KeyA') placeOrder('long'); if (event.code === 'KeyD') placeOrder('short'); if (event.code === 'Space') { event.preventDefault(); closePosition(); } });
+  document.addEventListener('keydown', event => {
+    const modal = activeModal();
+    if (modal) {
+      if (event.key === 'Tab') {
+        const focusable = [...modal.querySelectorAll('button:not(:disabled), input:not(:disabled), [tabindex="0"]')];
+        const first = focusable[0], last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+      return;
+    }
+    if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.target.matches('input,textarea,select,[contenteditable=true]')) return;
+    if (event.code === 'KeyA') { event.preventDefault(); placeOrder('long'); }
+    if (event.code === 'KeyD') { event.preventDefault(); placeOrder('short'); }
+    if (event.code === 'Space' && !event.target.closest('button')) { event.preventDefault(); closePosition(); }
+  });
 
   function registerAgentTools() {
     const context = document.modelContext; if (!context?.registerTool) return; const controller = new AbortController(); const register = tool => { try { void Promise.resolve(context.registerTool(tool, { signal: controller.signal })).catch(() => {}); } catch (_) {} };
@@ -417,5 +475,5 @@
     register({ name: 'close_market_position', title: '历史回放平仓', description: '按当前历史K线价格全部平仓。', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute() { closePosition(); return { equity: Number(equity().toFixed(2)), score: state.score }; } });
   }
 
-  initLobby(); updatePoints(); resize(); registerAgentTools(); window.addEventListener('resize', resize); setInterval(advanceReplay, 160);
+  initLobby(); setMotion(reducedMotion, false); syncModal(); updatePoints(); resize(); registerAgentTools(); window.addEventListener('resize', resize); setInterval(advanceReplay, 160);
 })();
