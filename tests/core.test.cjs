@@ -24,3 +24,22 @@ test('incomplete lower-bar group is excluded and insufficient matches fail',()=>
 test('candidate confirms only later, then invalidates on failed breakout',()=>{const book=new PatternBook();const note=book.add({name:'测试底',side:'long',category:'反转',endId:1,lines:[[{id:0,price:90},{id:1,price:92}],[{id:0,price:100},{id:1,price:100}]]},0);assert.equal(note.status,'candidate');book.advance([{id:1,close:110}],1);assert.equal(note.status,'candidate');book.advance([{id:2,close:101}],2);assert.equal(note.status,'confirmed');book.advance([{id:3,close:99}],3);assert.equal(note.status,'invalid');});
 test('pattern detector accepts short history without future access',()=>{assert.deepEqual(detect([]),[]);assert.deepEqual(detect(micro(12).map((b,id)=>({...b,id}))),[]);});
 test('same command log and observations produce identical results',()=>{function run(){const l=ledger();signal(l);l.order('long',25);l.mark(105,1,60);l.order('long',10);l.order('short',25);l.mark(110,2,60);l.close();return {snapshot:l.snapshot(),fills:l.fills,cycles:l.cycles};}assert.deepEqual(run(),run());});
+
+test('bundled minute data is chronological, contiguous and long enough',()=>{
+  const fs=require('node:fs'),vm=require('node:vm'),sandbox={window:{}};
+  vm.runInNewContext(fs.readFileSync('dist/micro-history.js','utf8'),sandbox);
+  for(const rows of Object.values(sandbox.window.KLINE_RUSH_MICRO_HISTORY.symbols)){
+    assert.equal(rows.length,4000);
+    for(let i=1;i<rows.length;i++)assert.equal(rows[i][0]-rows[i-1][0],60000);
+    const bars=rows.map(r=>({time:r[0],open:r[1],high:r[2],low:r[3],close:r[4],volume:r[5]}));
+    assert.ok(Replay.groupBars(bars,60000,5).length>=560);
+  }
+});
+test('HTML loads every core module before the UI adapter',()=>{
+  const fs=require('node:fs'),html=fs.readFileSync('dist/index.html','utf8');
+  const app=html.indexOf('src="./app.js"');
+  for(const path of ['core/ledger.js','core/replay.js','core/patterns.js','core/data.js','review.js','micro-history.js']){
+    assert.ok(html.indexOf('src="./'+path+'"')<app);assert.ok(fs.existsSync('dist/'+path));
+  }
+  assert.equal(html.includes('src="./binance-history.js"'),false);
+});

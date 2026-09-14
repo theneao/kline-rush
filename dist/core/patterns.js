@@ -27,6 +27,8 @@
     const bars = input.slice(-48); if (bars.length < 48) return [];
     const found = [];
     const last = bars.at(-1); const { peaks, troughs } = pivots(bars, 2);
+    const atr=bars.slice(-20).reduce((sum,b)=>sum+b.high-b.low,0)/20;
+    const near=(a,b,tolerance=.018)=>Math.abs(a-b)<=Math.max(last.close*.0002,atr*.6)*(tolerance/.018);
     const lastPeaks = peaks.slice(-3); const lastTroughs = troughs.slice(-3);
     if (lastPeaks.length === 3 && lastPeaks.every(point => near(point.price, lastPeaks[0].price, .018))) {
       const neck = Math.min(...bars.filter(bar => bar.id >= lastPeaks[0].id && bar.id <= lastPeaks[2].id).map(bar => bar.low));
@@ -36,26 +38,26 @@
       const neck = Math.max(...bars.filter(bar => bar.id >= lastTroughs[0].id && bar.id <= lastTroughs[2].id).map(bar => bar.high));
       found.push(buildPattern('三重底', 'long', '反转', [[...lastTroughs], [{ id: lastTroughs[0].id, price: neck }, { id: last.id, price: neck }]], last.id));
     }
-    if (lastPeaks.length === 3 && lastPeaks[1].price > lastPeaks[0].price * 1.025 && lastPeaks[1].price > lastPeaks[2].price * 1.025 && near(lastPeaks[0].price, lastPeaks[2].price, .035)) {
+    if (lastPeaks.length === 3 && lastPeaks[1].price > lastPeaks[0].price + atr*.8 && lastPeaks[1].price > lastPeaks[2].price + atr*.8 && near(lastPeaks[0].price, lastPeaks[2].price, .035)) {
       const n1 = lineBetweenRange(bars, lastPeaks[0].id, lastPeaks[1].id, 'low'); const n2 = lineBetweenRange(bars, lastPeaks[1].id, lastPeaks[2].id, 'low');
       found.push(buildPattern('头肩顶', 'short', '反转', [[lastPeaks[0], lastPeaks[1], lastPeaks[2]], [n1, n2]], last.id));
     }
-    if (lastTroughs.length === 3 && lastTroughs[1].price < lastTroughs[0].price * .975 && lastTroughs[1].price < lastTroughs[2].price * .975 && near(lastTroughs[0].price, lastTroughs[2].price, .035)) {
+    if (lastTroughs.length === 3 && lastTroughs[1].price < lastTroughs[0].price - atr*.8 && lastTroughs[1].price < lastTroughs[2].price - atr*.8 && near(lastTroughs[0].price, lastTroughs[2].price, .035)) {
       const n1 = lineBetweenRange(bars, lastTroughs[0].id, lastTroughs[1].id, 'high'); const n2 = lineBetweenRange(bars, lastTroughs[1].id, lastTroughs[2].id, 'high');
       found.push(buildPattern('头肩底', 'long', '反转', [[lastTroughs[0], lastTroughs[1], lastTroughs[2]], [n1, n2]], last.id));
     }
     if (lastPeaks.length >= 2) {
       const [a, b] = lastPeaks.slice(-2); const valley = lineBetweenRange(bars, a.id, b.id, 'low');
-      if (near(a.price, b.price, .018) && valley && valley.price < Math.min(a.price, b.price) * .985) found.push(buildPattern('双重顶', 'short', '反转', [[a, b], [valley, { id: last.id, price: valley.price }]], last.id));
+      if (near(a.price, b.price, .018) && valley && valley.price < Math.min(a.price, b.price) - atr*.8) found.push(buildPattern('双重顶', 'short', '反转', [[a, b], [valley, { id: last.id, price: valley.price }]], last.id));
     }
     if (lastTroughs.length >= 2) {
       const [a, b] = lastTroughs.slice(-2); const peak = lineBetweenRange(bars, a.id, b.id, 'high');
-      if (near(a.price, b.price, .018) && peak && peak.price > Math.max(a.price, b.price) * 1.015) found.push(buildPattern('双重底', 'long', '反转', [[a, b], [peak, { id: last.id, price: peak.price }]], last.id));
+      if (near(a.price, b.price, .018) && peak && peak.price > Math.max(a.price, b.price) + atr*.8) found.push(buildPattern('双重底', 'long', '反转', [[a, b], [peak, { id: last.id, price: peak.price }]], last.id));
     }
     const curve = bars.slice(-36); const left = curve.slice(0, 8).reduce((s, b) => s + b.close, 0) / 8; const middle = curve.slice(14, 22).reduce((s, b) => s + b.close, 0) / 8; const right = curve.slice(-8).reduce((s, b) => s + b.close, 0) / 8;
     const curveLine = curve.filter((_, i) => i % 5 === 0 || i === curve.length - 1).map(bar => ({ id: bar.id, price: bar.close }));
-    if (near(left, right, .035) && middle > Math.max(left, right) * 1.035) found.push(buildPattern('圆弧顶', 'short', '反转', [curveLine], last.id));
-    if (near(left, right, .035) && middle < Math.min(left, right) * .965) found.push(buildPattern('圆弧底', 'long', '反转', [curveLine], last.id));
+    if (near(left, right, .035) && middle > Math.max(left, right) + atr*1.5) found.push(buildPattern('圆弧顶', 'short', '反转', [curveLine], last.id));
+    if (near(left, right, .035) && middle < Math.min(left, right) - atr*1.5) found.push(buildPattern('圆弧底', 'long', '反转', [curveLine], last.id));
     const window = bars.slice(-26); const local = pivots(window, 1); const highReg = regression(local.peaks.map(point => ({ id: point.id, price: point.price }))); const lowReg = regression(local.troughs.map(point => ({ id: point.id, price: point.price })));
     if (highReg && lowReg && local.peaks.length >= 3 && local.troughs.length >= 3) {
       const from = window[0].id; const to = window.at(-1).id; const lines = [[highReg.point(from), highReg.point(to)], [lowReg.point(from), lowReg.point(to)]];
@@ -66,7 +68,7 @@
       if (Math.abs(lowReg.slope) < Math.abs(highReg.slope) * .22) found.push(buildPattern('下降三角形', 'short', '持续', lines, last.id));
     }
     const flag = bars.slice(-22); const impulse = (flag[7].close - flag[0].open) / flag[0].open; const consolidation = flag.slice(8); const consPoints = consolidation.map(bar => ({ id: bar.id, price: bar.close })); const consReg = regression(consPoints); const consRange = Math.max(...consolidation.map(bar => bar.high)) - Math.min(...consolidation.map(bar => bar.low)); const impulseRange = Math.max(...flag.slice(0, 8).map(bar => bar.high)) - Math.min(...flag.slice(0, 8).map(bar => bar.low));
-    if (consReg && Math.abs(impulse) > .04 && consRange < impulseRange * .72 && Math.sign(consReg.slope) !== Math.sign(impulse)) {
+    if (consReg && Math.abs(impulse) > atr / last.close * 2.5 && consRange < impulseRange * .72 && Math.sign(consReg.slope) !== Math.sign(impulse)) {
       const highs = regression(consolidation.map(bar => ({ id: bar.id, price: bar.high }))); const lows = regression(consolidation.map(bar => ({ id: bar.id, price: bar.low }))); const from = consolidation[0].id; const to = last.id;
       found.push(buildPattern(impulse > 0 ? '上升旗形' : '下降旗形', impulse > 0 ? 'long' : 'short', '持续/中继', [[highs.point(from), highs.point(to)], [lows.point(from), lows.point(to)]], last.id));
     }

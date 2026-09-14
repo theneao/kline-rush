@@ -114,33 +114,36 @@
     $('instrumentGrid').addEventListener('click', event => {
       const button = event.target.closest('.instrument-card'); if (!button) return;
       state.selected = INSTRUMENTS.find(item => item.symbol === button.dataset.symbol);
-      renderInstruments(); $('loadStatus').textContent = '';
+      renderInstruments(); $('instrumentGrid').querySelector('.active')?.focus(); $('loadStatus').textContent = '';
     });
   }
   async function startMatch(options={}) {
     if(loading)return;
-    const practice=options.practice===true, same=options.same===true;
+    const practice=options.practice===true, same=options.same===true, instrument=state.selected;
     const fee=practice?0:CONFIG.entryFee;
     if(state.careerPoints<fee){$('loadStatus').textContent='积分不足，可以免费练习';showToast('积分不足，可以免费练习');return;}
     loading=true;$('startMatch').disabled=true;$('rematchButton').disabled=true;$('practiceButton').disabled=true;
     $('loadStatus').textContent='准备细粒度历史行情…';
     try {
       if(!same||!savedSegment) {
-        if(!loadedHistory||loadedHistory.symbol!==state.selected.symbol)loadedHistory={...await KlineData.load(state.selected),symbol:state.selected.symbol};
+        if(!loadedHistory||loadedHistory.symbol!==instrument.symbol)loadedHistory={...await KlineData.load(instrument),symbol:instrument.symbol};
+        state.selected=instrument;state.selectedMarket=instrument.market;
         const seedArray=new Uint32Array(1);crypto.getRandomValues(seedArray);matchSeed=seedArray[0];
         savedSegment=KlineReplay.selectSegment(loadedHistory.groups,matchSeed,CONFIG.warmup,CONFIG.matchCandles,loadedHistory.maxGapMs);
       }
       state.sourceLabel=loadedHistory.source;
       // Validate before debiting entry points.
       if(savedSegment.length!==560||savedSegment.some(b=>!Array.isArray(b.steps)||!b.steps.length))throw Error('回放数据不完整');
-      paidFee=fee;state.practice=practice;state.careerPoints-=fee;savePoints();
+      paidFee=fee;state.practice=practice;
       initializeReplay(savedSegment);
+      state.careerPoints-=fee;savePoints();
       $('lobby').classList.remove('show');syncModal();$('loadStatus').textContent='';
     }catch(error){$('loadStatus').textContent='无法开始：'+(error?.message||'行情加载失败');showToast($('loadStatus').textContent);}
     finally{loading=false;$('startMatch').disabled=false;$('rematchButton').disabled=false;$('practiceButton').disabled=false;}
   }
 
   function initializeReplay(segment) {
+    savedSegment=segment;
     ledger=new KlineCore.Ledger(CONFIG);patternBook=new KlinePatterns.PatternBook();settled=false;frames=[];gameTick=0;lastFrame=null;accumulator=0;
     $('reviewPanel').hidden=true;
     Object.assign(state, { matchActive: true, gameOver: false, replay: segment.slice(CONFIG.warmup), replayIndex: 0, tickInCandle: 0,
@@ -364,7 +367,7 @@
     const modal = activeModal();
     if (modal) {
       if (event.key === 'Tab') {
-        const focusable = [...modal.querySelectorAll('button:not(:disabled), input:not(:disabled), [tabindex="0"]')];
+        const focusable = [...modal.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]')].filter(element => !element.getClientRects || element.getClientRects().length > 0);
         const first = focusable[0], last = focusable.at(-1);
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }

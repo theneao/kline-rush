@@ -31,12 +31,13 @@ function game() {
   const context = vm.createContext({document, window, navigator:{}, localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)}, performance:{now:()=>1000}, setTimeout:fn=>{timeouts.set(++timer,fn);return timer;},clearTimeout:id=>timeouts.delete(id),setInterval(){}, requestAnimationFrame(){}, crypto:{getRandomValues:a=>{a[0]=42;}}, devicePixelRatio:1, AbortController,console});
   for(const file of ['dist/core/ledger.js','dist/core/replay.js','dist/core/patterns.js','dist/core/data.js','dist/review.js']) vm.runInContext(fs.readFileSync(file,'utf8'),context);
   let source = fs.readFileSync('dist/app.js','utf8');
-  source = source.replace('  initLobby();', '  window.testApi = {state, CONFIG, initializeReplay, placeOrder, closePosition, setAllocation, equity, availableMargin, showPattern, beginMarketEvent, setMotion, advanceReplay, syncModal, finishMatch, get ledger(){return ledger;}, get frames(){return frames;}, mark(price){state.price=price;ledger.mark(price,++gameTick,state.candleId);syncLedger();}};\n  initLobby();');
+  source = source.replace('  initLobby();', '  window.testApi = {state, CONFIG, initializeReplay, placeOrder, closePosition, setAllocation, equity, availableMargin, showPattern, beginMarketEvent, setMotion, advanceReplay, syncModal, finishMatch, startMatch, get ledger(){return ledger;}, get frames(){return frames;}, mark(price){state.price=price;ledger.mark(price,++gameTick,state.candleId);syncLedger();}};\n  initLobby();');
   vm.runInContext(source,context);
   const api=window.testApi;
   const bars = Array.from({length:560},(_,i)=>({time:new Date(2020,0,i+1).toISOString(),open:100,high:110,low:90,close:105,steps:Array.from({length:5},()=>({open:100,high:110,low:90,close:105,volume:1}))}));
   api.initializeReplay(bars); get('lobby').classList.remove('show'); api.syncModal();
-  return { ...api,get,document,timeouts,storage };
+  context.KlineData.load=async()=>({groups:bars,source:'test lower history',maxGapMs:Infinity});
+  return { ...api,get,document,timeouts,storage,setHistoryLoader:fn=>{context.KlineData.load=fn;} };
 }
 
 test('pattern and market feedback never changes quantity or flashes buttons',()=>{
@@ -76,4 +77,17 @@ test('zero-equity observation settles before candle advances',()=>{
   const g=game();g.setAllocation(100);g.placeOrder('long');
   g.state.target.steps[0]={open:100,high:100,low:50,close:50,volume:1};
   g.advanceReplay();assert.equal(g.state.gameOver,true);assert.equal(g.state.replayIndex,0);assert.equal(g.state.position,null);
+});
+
+test('paid entry, once-only payout, and free same-segment practice',async()=>{
+  const g=game(),initial=g.state.careerPoints;
+  await g.startMatch();assert.equal(g.state.careerPoints,initial-200);
+  g.finishMatch('complete');assert.equal(g.state.careerPoints,initial);
+  await g.startMatch({practice:true,same:true});assert.equal(g.state.careerPoints,initial);assert.equal(g.state.practice,true);
+  g.placeOrder('long');g.mark(110);g.closePosition();g.finishMatch('complete');assert.equal(g.state.careerPoints,initial);
+});
+test('failed lower-history loading does not debit entry points',async()=>{
+  const g=game(),initial=g.state.careerPoints;
+  g.setHistoryLoader(async()=>{throw Error('source unavailable');});
+  await g.startMatch();assert.equal(g.state.careerPoints,initial);assert.ok(g.get('loadStatus').textContent.includes('source unavailable'));
 });
