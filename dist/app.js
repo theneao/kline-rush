@@ -260,8 +260,12 @@
     $('priceLine').style.top = `${Math.max(6, Math.min(height - 6, scale.y(state.price)))}px`;
   }
 
-  function showPattern(event) {
-    const note=event.note,callout=$('patternCallout');
+  function showPattern(event, announce=true) {
+    const note=event.note;
+    if(event.type==='confirmed')ledger.registerSignal(note);
+    if(event.type==='invalid')ledger.invalidateSignal(note.id);
+    if(!announce)return;
+    const callout=$('patternCallout');
     callout.className='pattern-callout'+(event.type==='confirmed'?' match':'');
     callout.textContent=(event.type==='candidate'?'候选':event.type==='confirmed'?'已确认':'已失效')+' · '+note.name+(event.type==='confirmed'?' · 及时执行，盈利结算后奖励':'');
     timedEffect(callout,'show',2200);
@@ -272,7 +276,9 @@
     // Current candle contains only lower-timeframe observations already revealed.
     state.candles.push({...state.current});if(state.candles.length>150)state.candles.shift();
     const events=patternBook.advance(state.candles,gameTick);
-    events.forEach(showPattern);state.annotations=patternBook.visible();finishMarketEvent();
+    events.forEach(event=>showPattern(event,false));
+    const headline=events.find(event=>event.type==='confirmed')||events.find(event=>event.type==='invalid')||events.at(-1);
+    if(headline)showPattern(headline);state.annotations=patternBook.visible();finishMarketEvent();
     state.replayIndex+=1;state.candleId+=1;
     if(state.replayIndex>=CONFIG.matchCandles)finishMatch('complete');else prepareCandle();
   }
