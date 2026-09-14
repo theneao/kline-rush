@@ -1,0 +1,58 @@
+name: Preserve pre-refactor baseline
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/preserve-baseline.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: preserve-baseline-v1.1.0
+  cancel-in-progress: false
+
+jobs:
+  preserve:
+    if: github.repository == 'theneao/kline-rush' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create baseline tag without overwriting an existing tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_URL: ${{ github.api_url }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          repo = "theneao/kline-rush"
+          target = "a1c57283d67af8b2397e722b11978d43f454461a"
+          tag = "v1.1.0"
+          base = os.environ["API_URL"] + "/repos/" + repo
+          def api(path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(base + path, data=data, headers={
+                  "Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                  "Accept": "application/vnd.github+json",
+                  "Content-Type": "application/json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              })
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return json.load(response)
+          try:
+              ref = api("/git/ref/tags/" + tag)
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+              ref = api("/git/refs", {"ref": "refs/tags/" + tag, "sha": target})
+          obj = ref["object"]
+          for _ in range(8):
+              if obj["type"] != "tag":
+                  break
+              obj = api("/git/tags/" + obj["sha"])["object"]
+          if obj["type"] != "commit" or obj["sha"] != target:
+              raise SystemExit("Existing tag points elsewhere; refusing to move or replace it.")
+          print("Verified " + tag + " -> " + target)
+          PY
