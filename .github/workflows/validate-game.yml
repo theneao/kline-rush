@@ -1,0 +1,27 @@
+name: Validate trading game
+on:
+  push:
+    branches: [main, refactor/trading-core-v1.2]
+    paths: ['dist/**', 'tests/**', '.github/workflows/validate-game.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch the exact public source revision
+        shell: bash
+        run: |
+          git init .
+          git remote add origin https://github.com/theneao/kline-rush.git
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
+      - name: Validate syntax and accounting regressions
+        run: |
+          node --version
+          node --check dist/app.js
+          node --check dist/review.js
+          node --check dist/core/data.js
+          node --test tests/*.test.cjs

@@ -1,0 +1,21 @@
+/* Read-only settlement and review. Primary trade keys stay unobscured during play. */
+.game-over-card {width:min(840px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;text-align:left;border-radius:16px;}
+.game-over h1 {font-size:clamp(32px,6vw,52px);}
+.result-extra {grid-template-columns:repeat(3,1fr);}
+.result-actions {display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.result-actions button {min-height:48px;border-radius:8px;letter-spacing:0;}
+.result-actions button:not(:first-child) {background:#16232e;color:#e3edf7;border:1px solid #344052;}
+.result-actions button:disabled {opacity:.5;}
+#resultSeed,#reviewSummary,#reviewDetail {font-size:13px;line-height:1.6;color:#a7b6c9;}
+#reviewPanel {margin-top:22px;border-top:1px solid #344052;padding-top:12px;}
+#reviewPanel[hidden] {display:none;}
+#reviewCanvas {display:block;width:100%;height:220px;background:#05090f;border:1px solid #263341;border-radius:8px;}
+#reviewSlider {width:100%;height:44px;accent-color:#00f5d4;}
+#reviewPanel label {font-size:13px;display:block;margin-top:8px;}
+#reviewFillSelect {width:100%;min-height:44px;background:#101a25;color:white;border:1px solid #344052;border-radius:6px;padding:8px;}
+#reviewTrades {max-height:190px;overflow:auto;display:grid;gap:6px;margin-top:12px;}
+#reviewTrades button {text-align:left;background:#121c26;font-size:12px;font-weight:500;min-height:44px;letter-spacing:0;border-left:3px solid;}
+#reviewTrades .review-profit {color:#00f5d4;}
+#reviewTrades .review-loss {color:#ff87af;}
+.lobby-practice {width:100%;min-height:44px;margin-top:8px;color:#c6d5e8;background:#14212d;border:1px solid #344052;cursor:pointer;}
+@media(max-width:560px){.game-over-card {padding:20px;} .result-extra strong {font-size:17px;} .result-grid span {font-size:12px;} .result-actions button {font-size:13px;}}

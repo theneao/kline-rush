@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2305070b'/%3E%3Cpath d='M10 42h8V24h-8v18zm18 10h8V12h-8v40zm18-17h8V20h-8v15z' fill='%2300f5d4'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="./arena.css" />
+  <link rel="stylesheet" href="./review.css" />
 </head>
 <body>
   <main class="game-shell" id="gameShell">
@@ -40,7 +41,7 @@
           <strong id="lastPrice">—</strong>
           <em id="priceDelta">0.00%</em>
         </div>
-        <div class="market-stat"><span>连击</span><strong id="combo">× 1</strong></div>
+        <div class="market-stat"><span>周期连胜倍率</span><strong id="combo">× 1</strong></div>
         <div class="market-stat"><span>浮动盈亏</span><strong id="floatingPnl">$0.00</strong></div>
         <div class="market-stat position-equity-stat"><span>仓位净值 · 3×</span><strong id="positionEquity">$0.00</strong></div>
         <button class="motion-toggle" id="motionToggle" aria-label="低动态模式" aria-pressed="false">低动态</button>
@@ -118,16 +119,32 @@
         <span class="result-kicker" id="resultKicker">挑战结束</span>
         <h1 id="gameOverTitle">账户归零</h1>
         <div class="result-equity" id="resultEquity">$0.00</div>
-        <div class="result-grid"><span>最终得分<strong id="resultScore">0</strong></span><span>形态奖励<strong id="resultPatterns">0</strong></span></div>
+        <div class="result-grid"><span>最终得分<strong id="resultScore">0</strong></span><span>顺势盈利奖励次数<strong id="resultPatterns">0</strong></span></div>
         <div class="points-settlement" id="pointsSettlement">积分结算 0 PT</div>
-        <button id="restartButton">重新开局 <kbd>ENTER</kbd></button>
+        <div class="result-grid result-extra"><span>完整交易周期<strong id="resultCycles">0</strong></span><span>最长连胜<strong id="resultStreak">0</strong></span><span>总手续费<strong id="resultFees">$0.00</strong></span></div>
+        <p id="resultSeed"></p>
+        <div class="result-actions">
+          <button id="rematchButton">再赛一局 · 200 PT</button>
+          <button id="practiceButton">原区间免费练习</button>
+          <button id="reviewButton">关键交易复盘</button>
+          <button id="restartButton">返回选标的</button>
+        </div>
+        <section id="reviewPanel" hidden aria-label="只读交易复盘">
+          <p id="reviewSummary"></p>
+          <canvas id="reviewCanvas" aria-label="历史交易复盘图"></canvas>
+          <label for="reviewSlider">回放时间轴</label>
+          <input type="range" id="reviewSlider" min="0" max="0" value="0" step="1" />
+          <p id="reviewDetail" role="status"></p>
+          <select id="reviewFillSelect" aria-label="跳转到某次成交"></select>
+          <div id="reviewTrades"></div>
+        </section>
       </div>
     </section>
     <section class="lobby show" id="lobby" role="dialog" aria-modal="true" aria-labelledby="lobbyTitle">
       <div class="lobby-card">
         <header><div><span>HISTORY ARENA</span><h1 id="lobbyTitle">选择历史战场</h1></div><div class="points-wallet"><small>当前积分</small><strong><span id="lobbyPoints">5,000</span> PT</strong></div></header>
         <div class="market-tabs" id="marketTabs" role="group" aria-label="市场分类">
-          <button class="active" data-market="us">美股</button><button data-market="cn">A 股</button><button data-market="crypto">虚拟货币</button><button data-market="futures">期货</button>
+          <button data-market="us">美股</button><button data-market="cn">A 股</button><button class="active" data-market="crypto">虚拟货币</button><button data-market="futures">期货</button>
         </div>
         <div class="instrument-grid" id="instrumentGrid" aria-label="选择交易标的"></div>
         <div class="match-rules">
@@ -136,15 +153,21 @@
           <span><small>积分结算</small><strong>按最终盈亏率</strong></span>
           <span><small>抽取方式</small><strong>随机连续区间</strong></span>
         </div>
-        <p class="data-note">每局只使用真实历史 OHLC；加载失败时不会用模拟行情替代。</p>
-        <p class="data-note">同向加仓，反向减仓 · A / D 下单，空格平仓。形态提示不会替你操作。历史蜡烛内的价格路径为插值，不代表真实逐笔成交。</p>
+        <p class="data-note">使用已完成的细粒度历史 K 线推进大周期图。BTC / ETH：1 分钟 → 5 分钟；其他标的：5 分钟 → 30 分钟。加载失败不替换为模拟行情。</p>
+        <p class="data-note">同向加仓，反向减仓 · A / D 下单，空格平仓。形态提示不会替你操作。只在下一条细粒度行情到达时更新价格，不插值、不预告最终涨跌；并非逐笔回放。</p>
         <label class="motion-option"><input type="checkbox" id="lobbyMotion" /> 低动态模式：保留成交提示，减少闪光与位移</label>
         <button class="start-match" id="startMatch">扣除 200 PT · 开始比赛</button>
+        <button class="lobby-practice" id="lobbyPractice">免费练习 · 不消耗积分</button>
         <div class="load-status" id="loadStatus" role="status" aria-live="polite"></div>
       </div>
     </section>
   </main>
-  <script src="./binance-history.js"></script>
+  <script src="./micro-history.js"></script>
+  <script src="./core/ledger.js"></script>
+  <script src="./core/replay.js"></script>
+  <script src="./core/patterns.js"></script>
+  <script src="./core/data.js"></script>
+  <script src="./review.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
