@@ -26,11 +26,6 @@
     if (!result?.timestamp || !quote) throw new Error('历史行情格式无效');
     return cleanBars(result.timestamp.map((time, i) => ({ time: new Date(time * 1000).toISOString(), open: quote.open[i], high: quote.high[i], low: quote.low[i], close: quote.close[i], volume: quote.volume[i] })));
   }
-  async function fetchStooq(instrument) {
-    const csv = await fetchWithTimeout(`https://stooq.com/q/d/l/?s=${encodeURIComponent(instrument.stooq)}&i=d`, 'text');
-    const rows = csv.trim().split(/\r?\n/).slice(1);
-    return cleanBars(rows.map(row => { const [time, open, high, low, close, volume] = row.split(','); return { time, open, high, low, close, volume }; }));
-  }
   function fetchJsonp(url) {
     return new Promise((resolve, reject) => {
       const callback = `klineRush_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
@@ -51,7 +46,7 @@
     const data = await fetchJsonp(url);
     const rows = data?.data?.klines;
     if (!Array.isArray(rows)) throw new Error('A股历史行情格式无效');
-    return cleanBars(rows.map(row => { const [time, open, close, high, low, volume] = row.split(','); return { time, open, high, low, close, volume }; }));
+    return cleanBars(rows.map(row => { const [time, open, close, high, low, volume] = row.split(','); return { time:time.replace(' ', 'T')+'+08:00', open, high, low, close, volume }; }));
   }
 
   async function load(instrument) {
@@ -71,7 +66,7 @@
       stepMs=60000;count=5;source='Binance 1分钟历史 → 5分钟回放';
     } else {
       bars=instrument.provider==='eastmoney'?await fetchEastmoney(instrument):await fetchYahoo(instrument);
-      stepMs=300000;count=6;source=(instrument.provider==='eastmoney'?'东方财富':'Yahoo Finance')+' 5分钟历史 → 30分钟回放';
+      stepMs=300000;count=3;source=(instrument.provider==='eastmoney'?'东方财富':'Yahoo Finance')+' 5分钟历史 → 15分钟回放';
     }
     const groups=globalThis.KlineReplay.groupBars(bars,stepMs,count);
     if(groups.length<560)throw Error('可用完整细粒度 K 线只有 '+groups.length+' 根，需要 560 根；请更换标的');

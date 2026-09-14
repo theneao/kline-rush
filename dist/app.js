@@ -174,6 +174,7 @@
     checkGameEnd();if(state.gameOver)return;
     const range=state.current.high-state.current.low,body=Math.abs(state.current.close-state.current.open);
     if(!state.marketEvent&&(range>state.currentAvgRange*1.75||body>state.currentAvgRange*1.35))beginMarketEvent(state.current.close>=state.current.open?1:-1,'分钟行情大波动');
+    if(state.marketEvent&&state.marketEvent.direction!==(state.current.close>=state.current.open?1:-1))beginMarketEvent(state.current.close>=state.current.open?1:-1,'波动方向变化');
     if(state.marketEvent)emitEventParticles(state.marketEvent.direction);
     if(state.tickInCandle>=state.target.steps.length)completeCandle();
     updateHud();
@@ -254,7 +255,7 @@
     const items = visibleCandles(); if (!items.length) return;
     const scale = chartScale(items, height); const slot = width / 59; const startX = Math.max(8, width - items.length * slot - width * .075); const currentX = startX + (items.length - 1) * slot + slot / 2;
     ctx.save(); drawPositionZone(items, scale, startX, slot, currentX);
-    items.forEach((bar, index) => { const x = startX + index * slot + slot / 2; const color = bar.close >= bar.open ? LONG : SHORT; const isCurrent = index === items.length - 1; ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = state.marketEvent && isCurrent ? 1.8 : 1; ctx.globalAlpha = index < 5 ? .25 + index * .12 : 1; if (isCurrent && state.marketEvent) { ctx.shadowColor = color; ctx.shadowBlur = 22; } ctx.beginPath(); ctx.moveTo(x, scale.y(bar.high)); ctx.lineTo(x, scale.y(bar.low)); ctx.stroke(); const top = Math.min(scale.y(bar.open), scale.y(bar.close)); ctx.fillRect(x - Math.max(4, slot * .54) / 2, top, Math.max(4, slot * .54), Math.max(2, Math.abs(scale.y(bar.open) - scale.y(bar.close)))); ctx.shadowBlur = 0; });
+    items.forEach((bar, index) => { const x = startX + index * slot + slot / 2; const color = bar.close === bar.open ? '#a7b6c9' : bar.close > bar.open ? LONG : SHORT; const isCurrent = index === items.length - 1; ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = state.marketEvent && isCurrent ? 1.8 : 1; ctx.globalAlpha = index < 5 ? .25 + index * .12 : 1; if (isCurrent && state.marketEvent) { ctx.shadowColor = color; ctx.shadowBlur = 22; } ctx.beginPath(); ctx.moveTo(x, scale.y(bar.high)); ctx.lineTo(x, scale.y(bar.low)); ctx.stroke(); const top = Math.min(scale.y(bar.open), scale.y(bar.close)); ctx.fillRect(x - Math.max(4, slot * .54) / 2, top, Math.max(4, slot * .54), Math.max(2, Math.abs(scale.y(bar.open) - scale.y(bar.close)))); ctx.shadowBlur = 0; });
     drawAnnotations(items, scale, startX, slot); state.trades.slice(-30).forEach(trade => drawTradeMarker(trade, items, startX, slot, scale)); drawParticles(currentX, scale.y(state.price)); ctx.restore();
     $('priceLine').style.top = `${Math.max(6, Math.min(height - 6, scale.y(state.price)))}px`;
   }
@@ -327,7 +328,8 @@
     $('resultKicker').textContent=state.practice?'免费练习完成':reason==='complete'?'500 根回放完成':reason==='tenfold'?'十倍挑战达成':reason==='dataError'?'数据中断结算':'账户归零';
     $('gameOverTitle').textContent=(result.returnRate>=0?'收益 ':'亏损 ')+Math.abs(result.returnRate*100).toFixed(2)+'%';
     $('gameOverTitle').style.color=result.returnRate>=0?LONG:SHORT;
-    $('resultEquity').textContent=money(finalEquity);$('resultScore').textContent=state.score.toLocaleString('en-US');$('resultPatterns').textContent=ledger.rewardCount;
+    $('resultEquity').textContent=money(finalEquity);$('resultEquity').style.color=result.returnRate>=0?LONG:SHORT;
+    $('pointsSettlement').style.color=result.netPoints>=0?LONG:SHORT;$('resultScore').textContent=state.score.toLocaleString('en-US');$('resultPatterns').textContent=ledger.rewardCount;
     $('pointsSettlement').textContent=state.practice?'练习不扣除、不获得积分':'入场 −'+paidFee+' PT · 返还 '+result.payout+' PT · 净变动 '+(result.netPoints>=0?'+':'')+result.netPoints+' PT';
     $('resultCycles').textContent=ledger.cycles.length;$('resultStreak').textContent=ledger.bestStreak;
     $('resultFees').textContent=money(ledger.fills.reduce((sum,f)=>sum+f.fee,0));
